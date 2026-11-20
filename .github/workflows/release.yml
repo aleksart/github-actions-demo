@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        app: [cashflow, pnl]
+    uses: ./.github/workflows/_build-app.yml
+    with:
+      app: ${{ matrix.app }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist/
+      - name: Zip each app
+        run: |
+          cd dist
+          for d in dist-*; do (cd "$d" && zip -qr "../${d#dist-}-${GITHUB_REF_NAME}.zip" .); done
+          ls -la ./*.zip
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.zip \
+            --repo "$GITHUB_REPOSITORY" --generate-notes --title "$GITHUB_REF_NAME"
