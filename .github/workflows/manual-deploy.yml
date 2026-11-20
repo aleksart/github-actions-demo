@@ -1,0 +1,38 @@
+name: Manual deploy (approval demo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App to "deploy"
+        type: choice
+        options: [cashflow, pnl]
+        default: cashflow
+      dry-run:
+        description: Skip the deploy step
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/_build-app.yml
+    with:
+      app: ${{ inputs.app }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Configure required reviewers on the "production" environment in repo settings.
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+      - name: Fake deploy
+        run: |
+          echo "dry-run=${{ inputs.dry-run }}"
+          [ "${{ inputs.dry-run }}" = "true" ] && echo "skipping" || echo "would deploy ${{ inputs.app }}"
+          ls -la
