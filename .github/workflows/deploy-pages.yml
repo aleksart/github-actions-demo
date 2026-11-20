@@ -52,7 +52,7 @@ jobs:
           <ul><li><a href="cashflow/">Cashflow</a></li><li><a href="pnl/">P&amp;L</a></li></ul>
           HTML
           find . -maxdepth 2 | sort
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
