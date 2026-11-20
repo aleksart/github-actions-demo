@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      cashflow: ${{ steps.filter.outputs.cashflow }}
+      pnl: ${{ steps.filter.outputs.pnl }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cashflow:
+              - 'apps/cashflow/**'
+              - 'packages/core/**'
+              - 'package.json'
+              - 'bun.lock'
+            pnl:
+              - 'apps/pnl/**'
+              - 'packages/core/**'
+              - 'package.json'
+              - 'bun.lock'
+
+  verify:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun-deps
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
+
+  build-cashflow:
+    needs: [changes, verify]
+    if: needs.changes.outputs.cashflow == 'true'
+    uses: ./.github/workflows/_build-app.yml
+    with:
+      app: cashflow
+
+  build-pnl:
+    needs: [changes, verify]
+    if: needs.changes.outputs.pnl == 'true'
+    uses: ./.github/workflows/_build-app.yml
+    with:
+      app: pnl
+
+  # Single required status check for branch protection. Skipped builds count as success.
+  ci-gate:
+    name: CI gate
+    if: always()
+    needs: [verify, build-cashflow, build-pnl]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed or was cancelled
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            exit 1
+          fi

@@ -1,0 +1,43 @@
+name: Build app (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: App folder name under apps/
+        required: true
+        type: string
+      base-path:
+        description: Vite base path override (optional)
+        required: false
+        type: string
+        default: ""
+    outputs:
+      artifact-name:
+        description: Name of the uploaded dist artifact
+        value: ${{ jobs.build.outputs.artifact-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ inputs.app }}
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.meta.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun-deps
+      - id: meta
+        run: echo "name=dist-${{ inputs.app }}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: bun run --filter @demo/${{ inputs.app }} build
+        env:
+          BASE_PATH: ${{ inputs.base-path }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}
+          path: apps/${{ inputs.app }}/dist
+          if-no-files-found: error
+          retention-days: 7
