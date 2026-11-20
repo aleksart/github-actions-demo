@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-bun-deps
+      - run: bun run lint && bun run typecheck && bun test
+
+  build:
+    needs: verify
+    strategy:
+      matrix:
+        app: [cashflow, pnl]
+    uses: ./.github/workflows/_build-app.yml
+    with:
+      app: ${{ matrix.app }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: _site/
+      - name: Normalize layout (dist-<app> -> <app>)
+        run: |
+          cd _site
+          for d in dist-*; do mv "$d" "${d#dist-}"; done
+          cat > index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>Dashboards</title>
+          <ul><li><a href="cashflow/">Cashflow</a></li><li><a href="pnl/">P&amp;L</a></li></ul>
+          HTML
+          find . -maxdepth 2 | sort
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
